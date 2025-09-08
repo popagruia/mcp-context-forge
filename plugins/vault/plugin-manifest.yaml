@@ -1,0 +1,8 @@
+description: "Vault plugin that based  that will generate bearer token based on a vault saved token"
+author: "Adrian Popa"
+version: "0.0.1"
+available_hooks:
+   - "tool_pre_invoke"
+default_configs:
+  sytem_tag_prefix: system
+
