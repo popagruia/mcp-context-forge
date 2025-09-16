@@ -62,12 +62,9 @@ class Vault(Plugin):
         Returns:
             Result with potentially modified tool arguments.
         """
-        logger.debug(f"Processing tool pre-invoke for tool '{payload.name}' with {len(payload.args) if payload.args else 0} arguments")
-        print("Here tool_pre_invoke --->", "Payload", payload, "Context", context)
-        
-        print("Here Gateway --->", context.global_context.metadata['gateway'])
-        gw_id = context.global_context.server_id
-        print("Gw id", gw_id)
+        logger.debug(f"Processing tool pre-invoke for tool {payload}  with context {context}")
+        logger.debug (f"Gateway metadata {context.global_context.metadata['gateway']}")
+
         gateway_metadata = context.global_context.metadata['gateway']
         
         system_key: str | None = None
@@ -83,9 +80,10 @@ class Vault(Plugin):
             db = next(gen)
 
             gateway_service = GatewayService()
+            gw_id = context.global_context.server_id
             if gw_id:
                 gateway = await gateway_service.get_gateway(db, gw_id)
-                print("gateway used", gateway.oauth_config)
+                logger.info(f"Gateway used {gateway.oauth_config}")
                 if gateway.oauth_config:
                     token_url = gateway.oauth_config["token_url"]
                     parsed_url = urlparse(token_url)
@@ -105,7 +103,7 @@ class Vault(Plugin):
             
         if system_key in vault_tokens:
             if vault_handling == VaultHandling.RAW:
-                logger.info(f"Set Bearer token for system tag: {system_key} : {vault_tokens}")
+                logger.info(f"Set Bearer token for system tag: {system_key}")
                 bearer_token: str = str(vault_tokens[system_key])
                 headers["Authorization"] = f"Bearer {bearer_token}"
                 modified = True
