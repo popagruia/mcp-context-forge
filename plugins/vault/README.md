@@ -7,7 +7,7 @@ The Vault Plugin provides secure storage and retrieval of secrets, ensuring that
 ## Features
 
 Replace the Bearer token in a tool invocation based on a header that is send to the agent. Header is matched based on the MCP server metadata
-   - tag that start with sytem_tag_prefix
+   - tag that start with system_tag_prefix
    - extract the host of the authentication server from 
 
 
@@ -33,7 +33,7 @@ Replace the Bearer token in a tool invocation based on a header that is send to 
         server_ids: []  # Apply to all servers
         tenant_ids: []  # Apply to all tenants
     config:
-      sytem_tag_prefix: "system"
+      system_tag_prefix: "system"
       vault_header_name: "X-Vault-Tokens"
       vault_handling: "raw"
       
@@ -44,10 +44,10 @@ Replace the Bearer token in a tool invocation based on a header that is send to 
 ### Development Environment (Permissive)
 ```yaml
 config:
-  sytem_tag_prefix: "system" ### The prefix of the tag that contains the system name
+  system_tag_prefix: "system" ### The prefix of the tag that contains the system name
   system_handling: "tag" # # Gets the OAUTH2 IDP host from tags. The tag must have the format "system:host" where host is the hostname of the IDP. Use oauth2_config to extract IDP hostname from the OAUTH_CONFIG metadata of the MCP Server template.
   vault_header_name: "X-Vault-Tokens"  # Name of the header that contains the tokens.
-  vault_handlingy: "raw"  # Use the token that matches the system as bearer token
+  vault_handling: "raw"  # Use the token that matches the system as bearer token
 
 
 ### Features

@@ -14,25 +14,26 @@ from mcpgateway.plugins.framework import (
 
 from mcpgateway.plugins.framework.models import HttpHeaderPayload
 from mcpgateway.services.logging_service import LoggingService
-from plugins.vault.vault_proxy import async_unwrap_secret
 
 from mcpgateway.services.gateway_service import GatewayService
 from mcpgateway.db import get_db
 from urllib.parse import urlparse
 
 import json
-from mcpgateway.services.gateway_service import GatewayService
 
 # Initialize logging service first
 logging_service = LoggingService()
 logger = logging_service.get_logger(__name__)
 
+
 class VaultHandling(Enum):
     RAW = "raw"
+
 
 class SystemHandling(Enum):
     TAG = "tag"
     OAUTH2_CONFIG = "oauth2_config"
+
 
 class VaultConfig(BaseModel):
     system_tag_prefix: str = "system"
@@ -63,10 +64,10 @@ class Vault(Plugin):
             Result with potentially modified tool arguments.
         """
         logger.debug(f"Processing tool pre-invoke for tool {payload}  with context {context}")
-        logger.debug (f"Gateway metadata {context.global_context.metadata['gateway']}")
+        logger.debug(f"Gateway metadata {context.global_context.metadata['gateway']}")
 
         gateway_metadata = context.global_context.metadata['gateway']
-        
+
         system_key: str | None = None
         if self._sconfig.system_handling == SystemHandling.TAG:
             system_tag = next((tag for tag in gateway_metadata.tags if tag.startswith(self._sconfig.system_tag_prefix)), None)
@@ -74,7 +75,7 @@ class Vault(Plugin):
             if system_tag and system_tag.startswith(match_exp):
                 system_key = system_tag.split(match_exp)[1]
                 logger.info(f"Using vault system from GW tags: {system_key}")
-            
+
         elif self._sconfig.system_handling == SystemHandling.OAUTH2_CONFIG:
             gen = get_db()
             db = next(gen)
@@ -89,18 +90,18 @@ class Vault(Plugin):
                     parsed_url = urlparse(token_url)
                     system_key = parsed_url.hostname
                     logger.info(f"Using vault system from oauth_config: {system_key}")
-                     
+
         if not system_key:
             logger.warning("System cannot be determined from gateway metadata.")
             return ToolPreInvokeResult()
-   
+
         modified = False
         headers: dict[str, str] = payload.headers.model_dump() if payload.headers else {}
-        
+
         vault_tokens: dict[str, str] = json.loads(headers[self._sconfig.vault_header_name])
 
         vault_handling = self._sconfig.vault_handling
-            
+
         if system_key in vault_tokens:
             if vault_handling == VaultHandling.RAW:
                 logger.info(f"Set Bearer token for system tag: {system_key}")
@@ -116,6 +117,6 @@ class Vault(Plugin):
             return ToolPreInvokeResult(modified_payload=payload)
 
         return ToolPreInvokeResult()
-    
+
     async def shutdown(self) -> None:
         return None
