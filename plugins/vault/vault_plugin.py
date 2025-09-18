@@ -54,14 +54,14 @@ class Vault(Plugin):
             self._sconfig = VaultConfig()
 
     async def tool_pre_invoke(self, payload: ToolPreInvokePayload, context: PluginContext) -> ToolPreInvokeResult:
-        """Detect and mask PII in tool arguments before invocation.
+        """Generate bearer tokens from vault-saved tokens before tool invocation.
 
         Args:
             payload: The tool payload containing arguments.
             context: Plugin execution context.
 
         Returns:
-            Result with potentially modified tool arguments.
+            Result with potentially modified headers containing bearer token.
         """
         logger.debug(f"Processing tool pre-invoke for tool {payload}  with context {context}")
         logger.debug(f"Gateway metadata {context.global_context.metadata['gateway']}")
@@ -79,17 +79,19 @@ class Vault(Plugin):
         elif self._sconfig.system_handling == SystemHandling.OAUTH2_CONFIG:
             gen = get_db()
             db = next(gen)
-
-            gateway_service = GatewayService()
-            gw_id = context.global_context.server_id
-            if gw_id:
-                gateway = await gateway_service.get_gateway(db, gw_id)
-                logger.info(f"Gateway used {gateway.oauth_config}")
-                if gateway.oauth_config:
-                    token_url = gateway.oauth_config["token_url"]
-                    parsed_url = urlparse(token_url)
-                    system_key = parsed_url.hostname
-                    logger.info(f"Using vault system from oauth_config: {system_key}")
+            try:
+                gateway_service = GatewayService()
+                gw_id = context.global_context.server_id
+                if gw_id:
+                    gateway = await gateway_service.get_gateway(db, gw_id)
+                    logger.info(f"Gateway used {gateway.oauth_config}")
+                    if gateway.oauth_config and "token_url" in gateway.oauth_config:
+                        token_url = gateway.oauth_config["token_url"]
+                        parsed_url = urlparse(token_url)
+                        system_key = parsed_url.hostname
+                        logger.info(f"Using vault system from oauth_config: {system_key}")
+            finally:
+                gen.close()
 
         if not system_key:
             logger.warning("System cannot be determined from gateway metadata.")
@@ -98,7 +100,16 @@ class Vault(Plugin):
         modified = False
         headers: dict[str, str] = payload.headers.model_dump() if payload.headers else {}
 
-        vault_tokens: dict[str, str] = json.loads(headers[self._sconfig.vault_header_name])
+        # Check if vault header exists
+        if self._sconfig.vault_header_name not in headers:
+            logger.debug(f"Vault header '{self._sconfig.vault_header_name}' not found in headers")
+            return ToolPreInvokeResult()
+
+        try:
+            vault_tokens: dict[str, str] = json.loads(headers[self._sconfig.vault_header_name])
+        except (json.JSONDecodeError, TypeError) as e:
+            logger.error(f"Failed to parse vault tokens from header: {e}")
+            return ToolPreInvokeResult()
 
         vault_handling = self._sconfig.vault_handling
 

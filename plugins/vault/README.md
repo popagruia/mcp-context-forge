@@ -8,7 +8,7 @@ The Vault Plugin provides secure storage and retrieval of secrets, ensuring that
 
 Replace the Bearer token in a tool invocation based on a header that is send to the agent. Header is matched based on the MCP server metadata
    - tag that start with system_tag_prefix
-   - extract the host of the authentication server from 
+   - extract the host of the authentication server from
 
 
 
@@ -36,7 +36,7 @@ Replace the Bearer token in a tool invocation based on a header that is send to 
       system_tag_prefix: "system"
       vault_header_name: "X-Vault-Tokens"
       vault_handling: "raw"
-      
+
 ```
 
 ## Configuration Examples
@@ -96,4 +96,3 @@ async def vault_pre_fetch(self, payload: VaultPreFetchPayload) -> VaultPreFetchP
 ## Testing
 TBD
 ### Run Individual Tests
-
