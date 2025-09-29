@@ -251,6 +251,10 @@
           },
           "additionalProperties": false
         },
+        "pluginConfig": {
+          "type": "string",
+          "description": "Content of the plugin file"
+        },
         "env": {
           "type": "object",
           "description": "Environment configuration",
