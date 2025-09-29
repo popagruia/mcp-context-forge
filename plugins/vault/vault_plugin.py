@@ -120,7 +120,7 @@ class Vault(Plugin):
                 headers["Authorization"] = f"Bearer {bearer_token}"
                 del headers[self._sconfig.vault_header_name]
                 modified = True
-                del vault_tokens
+
 
             payload.headers = HttpHeaderPayload(root=headers)
 
