@@ -1,4 +1,8 @@
-{{- if and .Values.postgres.enabled .Values.postgres.persistence.enabled }}
+
+{{- /* ────────────────────────────────────────────────────────────────
+    rendered only if persistence.create is true
+   ──────────────────────────────────────────────────────────────── */ -}}
+{{- if and .Values.postgres.enabled .Values.postgres.persistence.enabled .Values.postgres.persistence.pvc_create }}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:

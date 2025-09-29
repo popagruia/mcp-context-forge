@@ -873,6 +873,16 @@
               "description": "Storage class name",
               "default": "manual"
             },
+            "pv_create": {
+              "type": "boolean",
+              "description": "enable persistence volume creation",
+              "default": "true"
+            },
+            "pvc_create": {
+              "type": "boolean",
+              "description": "enable persistence volume claim",
+              "default": "true"
+            },
             "accessModes": {
               "type": "array",
               "description": "Access modes",
@@ -887,7 +897,7 @@
               "description": "Storage size",
               "pattern": "^[0-9]+[KMGTPE]i?$",
               "default": "5Gi"
-            }
+             }
           },
           "additionalProperties": false
         },
