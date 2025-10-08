@@ -264,6 +264,8 @@
             "plugins": {
               "type": "string",
               "description": "contents of plugin file"
+            }
+          }
         },
         "env": {
           "type": "object",
