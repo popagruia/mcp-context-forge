@@ -156,7 +156,7 @@ spec:
           {{- if .Values.mcpContextForge.pluginConfig.enabled }}
           volumeMounts:
           - name: plugin-config-volume
-            mountPath: {{ .Values.mcpContextForge.config.PLUGIN_CONFIG_FILE | default "/app/mcpgateway/plugins/config.yaml" }}
+            mountPath: /app/{{ .Values.mcpContextForge.config.PLUGIN_CONFIG_FILE }}
             subPath: config.yaml
           {{- end }}
 {{- if .Values.mcpContextForge.pluginConfig.enabled }}
