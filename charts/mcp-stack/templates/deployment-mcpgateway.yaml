@@ -153,13 +153,13 @@ spec:
           resources:
 {{- toYaml .Values.mcpContextForge.resources | nindent 12 }}
           {{- /* Plugins enabled need the plugins configuration */}}
-          {{- if .Values.mcpContextForge.config.PLUGINS_ENABLED }}
+          {{- if .Values.mcpContextForge.pluginConfig.enabled }}
           volumeMounts:
           - name: plugin-config-volume
             mountPath: {{ .Values.mcpContextForge.config.PLUGIN_CONFIG_FILE | default "/app/mcpgateway/plugins/config.yaml" }}
             subPath: config.yaml
           {{- end }}
-{{- if .Values.mcpContextForge.config.PLUGINS_ENABLED }}
+{{- if .Values.mcpContextForge.pluginConfig.enabled }}
       volumes:
       - name: plugin-config-volume
         configMap:
