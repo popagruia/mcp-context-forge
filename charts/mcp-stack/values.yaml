@@ -99,9 +99,6 @@ mcpContextForge:
     host: gateway.local         # CHANGE to your FQDN (e.g. api.example.com)
     path: /
     pathType: Prefix
-    annotations:
-      nginx.ingress.kubernetes.io/rewrite-target: /
-      # cert-manager.io/cluster-issuer: letsencrypt-prod  # Uncomment to enable automatic TLS cert generation
     tls:
       enabled: false            # Set to true to enable TLS
       secretName: ""            # Name of the TLS secret (auto-generated if empty)
