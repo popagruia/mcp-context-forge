@@ -126,7 +126,6 @@ class Vault(Plugin):
 
         system_key: str | None = None
         auth_header: str | None = None
-        
         if self._sconfig.system_handling == SystemHandling.TAG:
             # Extract tags from dict format {"id": "...", "label": "..."}
             normalized_tags: list[str] = []
@@ -138,14 +137,12 @@ class Vault(Plugin):
                         normalized_tags.append(tag_value)
                 elif hasattr(tag, "label"):
                     normalized_tags.append(str(getattr(tag, "label")))
-            
             # Find system tag with the configured prefix
             system_prefix = self._sconfig.system_tag_prefix + ":"
             system_tag = next((tag for tag in normalized_tags if tag.startswith(system_prefix)), None)
             if system_tag:
                 system_key = system_tag.split(system_prefix)[1]
                 logger.info(f"Using vault system from GW tags: {system_key}")
-            
             # Find auth header tag with the configured prefix (e.g., "AUTH_HEADER:X-GitHub-Token")
             auth_header_prefix = self._sconfig.auth_header_tag_prefix + ":"
             auth_header_tag = next((tag for tag in normalized_tags if tag.startswith(auth_header_prefix)), None)
@@ -194,7 +191,6 @@ class Vault(Plugin):
         # First try exact match with system_key
         token_value: str | None = None
         token_key_used: str | None = None
-        
         if system_key in vault_tokens:
             token_value = str(vault_tokens[system_key])
             token_key_used = str(system_key)
@@ -212,12 +208,10 @@ class Vault(Plugin):
         if token_value and token_key_used:
             # Parse the token key to determine handling
             parsed_system, scope, token_type, token_name = self._parse_vault_token_key(token_key_used)
-            
             # Determine how to handle the token based on token_type and AUTH_HEADER tag
             if token_type == "PAT":
                 # Handle Personal Access Token
                 logger.info(f"Processing PAT token for system: {parsed_system}")
-                
                 # Check if AUTH_HEADER tag is defined
                 if auth_header:
                     logger.info(f"Using AUTH_HEADER tag for {parsed_system}: header={auth_header}")
