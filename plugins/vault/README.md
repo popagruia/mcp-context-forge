@@ -1,6 +1,6 @@
 # Vault Plugin
 
-The Vault plugin generates bearer tokens from vault-saved tokens based on OAuth2 configuration protecting a tool. 
+The Vault plugin generates bearer tokens from vault-saved tokens based on OAuth2 configuration protecting a tool.
 It receives a dictionary of secrets and use them to dispatch the authorization token to the server based on rules.
 
 ## Features
@@ -76,7 +76,7 @@ Where:
 ### PAT (Personal Access Token)
 
 When `token_type` is `PAT`:
-1. Checks if AUTH_HEADER:header tag exists 
+1. Checks if AUTH_HEADER:header tag exists
 2. If found, uses the configured custom header
 3. If not found, falls back to `Authorization: Bearer <token>`
 
