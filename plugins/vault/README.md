@@ -170,3 +170,56 @@ Extracts system from the OAuth2 configuration's `token_url`:
 ## Hook
 
 - **tool_pre_invoke**: Processes vault tokens before tool invocation
+
+
+## Testing
+
+## Create a token
+export MCPGATEWAY_BEARER_TOKEN = python3 -m mcpgateway.utils.create_jwt_token --username admin@example.com --exp 10080 --secret my-test-key
+
+export CLIENT_ID=xxx
+export CLIENT_SECRET=xxx
+
+
+## Register MCP server with the gateway and add OAuth2 configuration Using UI
+curl -s -X POST -H "Authorization: Bearer $MCPGATEWAY_BEARER_TOKEN" \
+     -H "Content-Type: application/json" \
+     -d '{
+           "name": "github_com",
+           "url": "https://api.githubcopilot.com/mcp/",
+           "description": "A new MCP server added with OAuth2 authentication",
+           "auth_type": "oauth",
+           "auth_value": {
+             "client_id": "'$CLIENT_ID'",
+             "client_secret": "'$CLIENT_SECRET'",
+             "token_url": "https://github.com/login/oauth/access_token",
+             "redirect_url": "http://localhost:4444/oauth/callback"
+           },
+           "tags": ["system:github.com"],
+           "passthrough_headers": ["X-Vault-Tokens"]
+         }' \
+     http://localhost:4444/gateways
+
+## Invocation
+When the server is configured invoke the server and send a pass through header of form
+
+    "X-Vault-Tokens": {
+        "github.com": "key"
+    },
+
+## Sample of Invoking a Tool on the Added Gateway
+
+```bash
+# Invoke a tool on the added gateway
+curl -s -X POST -H "Authorization: Bearer $MCPGATEWAY_BEARER_TOKEN" \
+     -H "Content-Type: application/json" \
+     -H 'X-Vault-Tokens: "{\"github.com\": \"key\"}"' \
+     -d '{
+           "tool_name": "github-com-list-issues",
+           "arguments": {
+             "repo": "reponame"
+           }
+         }' \
+     http://localhost:4444/tools/invoke
+```
+
