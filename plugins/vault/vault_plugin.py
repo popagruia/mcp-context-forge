@@ -174,10 +174,30 @@ class Vault(Plugin):
         modified = False
         headers: dict[str, str] = payload.headers.model_dump() if payload.headers else {}
 
+        # Log all received headers with masked values
+        masked_headers = {}
+        for header_name, header_value in headers.items():
+            if header_value and len(header_value) >= 6:
+                masked_headers[header_name] = f"{header_value[:3]}...{header_value[-3:]}"
+            elif header_value:
+                masked_headers[header_name] = "***"
+            else:
+                masked_headers[header_name] = "<empty>"
+        logger.info(f"Received headers: {json.dumps(masked_headers, indent=2)}")
+
         # Check if vault header exists
         if self._sconfig.vault_header_name not in headers:
             logger.debug(f"Vault header '{self._sconfig.vault_header_name}' not found in headers")
             return ToolPreInvokeResult()
+
+        # Log received vault header with masked token values
+        vault_header_value = headers[self._sconfig.vault_header_name]
+        try:
+            vault_tokens_preview = json.loads(vault_header_value)
+            masked_preview = {k: f"{v[:3]}...{v[-3:]}" if len(v) >= 6 else "***" for k, v in vault_tokens_preview.items()}
+            logger.info(f"Received vault header '{self._sconfig.vault_header_name}': {json.dumps(masked_preview)}")
+        except (json.JSONDecodeError, TypeError):
+            logger.info(f"Received vault header '{self._sconfig.vault_header_name}' (invalid JSON, length: {len(vault_header_value)} chars)")
 
         try:
             vault_tokens: dict[str, str] = json.loads(headers[self._sconfig.vault_header_name])
