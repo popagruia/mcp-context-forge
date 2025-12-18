@@ -49,11 +49,11 @@ class TestVaultPluginSmoke:
     def test_plugin_has_required_interface(self, plugin_config):
         """Test that the plugin has the required tool_pre_invoke method."""
         plugin = Vault(plugin_config)
-        
+
         # Check that required hook method exists
         assert hasattr(plugin, "tool_pre_invoke")
         assert callable(plugin.tool_pre_invoke)
-        
+
         # Check that shutdown method exists
         assert hasattr(plugin, "shutdown")
         assert callable(plugin.shutdown)
@@ -68,4 +68,3 @@ class TestVaultPluginSmoke:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
-
