@@ -225,5 +225,69 @@ class TestVaultPluginFunctionality:
         assert "X-Vault-Tokens" not in result.modified_payload.headers.root
 
 
+    @pytest.mark.asyncio
+    async def test_vault_unwrap_failure_logs_error(self, plugin_context, monkeypatch):
+        """Test that vault unwrap failures are properly logged."""
+        from unittest.mock import AsyncMock, patch
+        import logging
+
+        # Create plugin config with UNWRAP mode
+        unwrap_config = PluginConfig(
+            name="TestVault",
+            description="Test Vault Plugin",
+            author="Test",
+            kind="plugins.vault.vault_plugin.Vault",
+            version="1.0",
+            hooks=[ToolHookType.TOOL_PRE_INVOKE],
+            tags=["test", "vault"],
+            mode=PluginMode.ENFORCE,
+            priority=10,
+            config={
+                "system_tag_prefix": "system",
+                "vault_header_name": "X-Vault-Tokens",
+                "vault_handling": "unwrap",
+                "vault_session_header": "X-Vault-Session-ID",
+            },
+        )
+        
+        plugin = Vault(unwrap_config)
+
+        # Create vault tokens
+        vault_tokens = {"github.com:USER:OAUTH2:TOKEN": "wrapped_token_xyz"}
+
+        # Create payload with session ID
+        payload = ToolPreInvokePayload(
+            name="test_tool",
+            arguments={},
+            headers=HttpHeaderPayload(
+                root={
+                    "Content-Type": "application/json",
+                    "X-Vault-Tokens": json.dumps(vault_tokens),
+                    "X-Vault-Session-ID": "test-session-123",
+                }
+            ),
+        )
+
+        # Mock vault_proxy to raise an exception
+        with patch("plugins.vault.vault_plugin.vault_proxy") as mock_vault:
+            mock_vault.async_unwrap_secret = AsyncMock(side_effect=Exception("Vault service unavailable"))
+            
+            # Mock Redis to return None (no cache)
+            with patch("plugins.vault.vault_plugin.get_redis_client") as mock_redis:
+                mock_redis.return_value = None
+                
+                # Capture log output
+                with patch("plugins.vault.vault_plugin.logger") as mock_logger:
+                    result = await plugin.tool_pre_invoke(payload, plugin_context)
+                    
+                    # Verify error was logged
+                    mock_logger.error.assert_called()
+                    error_calls = [str(call) for call in mock_logger.error.call_args_list]
+                    assert any("Vault unwrap failed" in str(call) for call in error_calls), f"Expected 'Vault unwrap failed' in logs, got: {error_calls}"
+                    
+                    # Verify empty result was returned (cannot proceed without token)
+                    assert result.modified_payload is None
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
