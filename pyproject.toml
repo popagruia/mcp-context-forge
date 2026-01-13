@@ -601,6 +601,7 @@ markers = [
     "benchmark: marks tests as performance benchmarks (migration testing)",
     "integration: marks tests as integration tests (require external services)",
     "postgresql: marks tests that require PostgreSQL database",
+    "performance: marks tests as performance tests (excluded from main test suite, run explicitly)",
 ]
 
 # Playwright-specific test discovery patterns
