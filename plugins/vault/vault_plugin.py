@@ -185,7 +185,15 @@ class Vault(Plugin):
             vault_tokens: dict[str, str] = orjson.loads(headers[self._sconfig.vault_header_name])
         except (orjson.JSONDecodeError, TypeError) as e:
             logger.error(f"Failed to parse vault tokens from header: {e}")
-            return ToolPreInvokeResult()
+            # SECURITY: Always remove vault header even on parse error
+            del headers[self._sconfig.vault_header_name]
+            payload.headers = HttpHeaderPayload(root=headers)
+            return ToolPreInvokeResult(modified_payload=payload)
+
+        # SECURITY: Always remove vault header immediately after successful parsing
+        # This header should NEVER be sent to the MCP server
+        del headers[self._sconfig.vault_header_name]
+        logger.debug(f"Removed vault header '{self._sconfig.vault_header_name}' from headers")
 
         vault_handling = self._sconfig.vault_handling
 
@@ -237,17 +245,18 @@ class Vault(Plugin):
                     headers["Authorization"] = f"Bearer {token_value}"
                     modified = True
 
-            # Remove vault header after processing
-            if modified and self._sconfig.vault_header_name in headers:
-                del headers[self._sconfig.vault_header_name]
-
             payload.headers = HttpHeaderPayload(root=headers)
 
         if modified:
             logger.info(f"Modified tool '{payload.name}' to add auth header")
             return ToolPreInvokeResult(modified_payload=payload)
 
-        return ToolPreInvokeResult()
+        # Even if we didn't modify headers (no token match), we still removed the vault header
+        # so we need to return the modified payload
+        if not token_value:
+            logger.warning(f"Vault tokens provided but no match found for system '{system_key}' - possible misconfiguration")
+        payload.headers = HttpHeaderPayload(root=headers)
+        return ToolPreInvokeResult(modified_payload=payload)
 
     async def shutdown(self) -> None:
         """Shutdown the plugin gracefully.

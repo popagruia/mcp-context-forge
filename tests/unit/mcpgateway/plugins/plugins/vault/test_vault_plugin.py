@@ -113,7 +113,7 @@ class TestVaultPluginFunctionality:
 
     @pytest.mark.asyncio
     async def test_invalid_json_in_vault_header(self, plugin_config, plugin_context):
-        """Test that invalid JSON in vault header is handled gracefully."""
+        """Test that invalid JSON in vault header is handled gracefully and header is removed."""
         plugin = Vault(plugin_config)
 
         # Create payload with invalid JSON
@@ -121,7 +121,9 @@ class TestVaultPluginFunctionality:
 
         result = await plugin.tool_pre_invoke(payload, plugin_context)
 
-        assert result.modified_payload is None
+        # SECURITY: Vault header must be removed even on parse error
+        assert result.modified_payload is not None
+        assert "X-Vault-Tokens" not in result.modified_payload.headers.root
         assert result.continue_processing
 
     @pytest.mark.asyncio
@@ -223,6 +225,26 @@ class TestVaultPluginFunctionality:
         assert result.modified_payload.headers.root["X-GitHub-Token"] == "ghp_new_pat_token"
         assert result.modified_payload.headers.root["X-GitHub-Token"] != "old_github_token"
         assert "X-Vault-Tokens" not in result.modified_payload.headers.root
+
+    @pytest.mark.asyncio
+    async def test_vault_header_removed_when_no_token_match(self, plugin_config, plugin_context):
+        """Test that vault header is removed even when no token matches the system."""
+        plugin = Vault(plugin_config)
+
+        # Create vault tokens for a different system
+        vault_tokens = {"gitlab.com": "glpat_different_system_token"}
+
+        # Create payload with vault header but no matching system
+        payload = ToolPreInvokePayload(name="test_tool", arguments={}, headers=HttpHeaderPayload(root={"Content-Type": "application/json", "X-Vault-Tokens": json.dumps(vault_tokens)}))
+
+        result = await plugin.tool_pre_invoke(payload, plugin_context)
+
+        # SECURITY: Vault header must be removed even when no token match is found
+        assert result.modified_payload is not None
+        assert "X-Vault-Tokens" not in result.modified_payload.headers.root
+        # No Authorization header should be added since there's no match
+        assert "Authorization" not in result.modified_payload.headers.root
+        assert result.continue_processing
 
 
 if __name__ == "__main__":
