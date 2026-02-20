@@ -171,6 +171,12 @@ class Vault(Plugin):
 
         if not system_key:
             logger.warning("System cannot be determined from gateway metadata.")
+            # SECURITY: Strip vault header even when system cannot be determined
+            hdrs: dict[str, str] = payload.headers.model_dump() if payload.headers else {}
+            if self._sconfig.vault_header_name in hdrs:
+                del hdrs[self._sconfig.vault_header_name]
+                payload.headers = HttpHeaderPayload(root=hdrs)
+                return ToolPreInvokeResult(modified_payload=payload)
             return ToolPreInvokeResult()
 
         modified = False
@@ -182,7 +188,7 @@ class Vault(Plugin):
             return ToolPreInvokeResult()
 
         try:
-            vault_tokens: dict[str, str] = orjson.loads(headers[self._sconfig.vault_header_name])
+            vault_tokens = orjson.loads(headers[self._sconfig.vault_header_name])
         except (orjson.JSONDecodeError, TypeError) as e:
             logger.error(f"Failed to parse vault tokens from header: {e}")
             # SECURITY: Always remove vault header even on parse error
@@ -193,6 +199,11 @@ class Vault(Plugin):
         # SECURITY: Always remove vault header immediately after successful parsing
         # This header should NEVER be sent to the MCP server
         del headers[self._sconfig.vault_header_name]
+
+        if not isinstance(vault_tokens, dict):
+            logger.error(f"Vault tokens header is not a JSON object: {type(vault_tokens).__name__}")
+            payload.headers = HttpHeaderPayload(root=headers)
+            return ToolPreInvokeResult(modified_payload=payload)
         logger.debug(f"Removed vault header '{self._sconfig.vault_header_name}' from headers")
 
         vault_handling = self._sconfig.vault_handling

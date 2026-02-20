@@ -127,8 +127,8 @@ class TestVaultPluginFunctionality:
         assert result.continue_processing
 
     @pytest.mark.asyncio
-    async def test_no_system_tag_returns_empty_result(self, plugin_config):
-        """Test that missing system tag returns empty result."""
+    async def test_no_system_tag_strips_vault_header(self, plugin_config):
+        """Test that missing system tag strips vault header and returns modified payload."""
         plugin = Vault(plugin_config)
 
         # Create context without system tag
@@ -144,7 +144,10 @@ class TestVaultPluginFunctionality:
 
         result = await plugin.tool_pre_invoke(payload, context)
 
-        assert result.modified_payload is None
+        # SECURITY: Vault header must be removed even when system tag is missing
+        assert result.modified_payload is not None
+        assert "X-Vault-Tokens" not in result.modified_payload.headers.root
+        assert result.continue_processing
 
     @pytest.mark.asyncio
     async def test_complex_token_key_parsing(self, plugin_config, plugin_context):
