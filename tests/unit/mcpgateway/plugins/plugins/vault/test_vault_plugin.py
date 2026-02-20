@@ -150,6 +150,39 @@ class TestVaultPluginFunctionality:
         assert result.continue_processing
 
     @pytest.mark.asyncio
+    async def test_no_system_tag_no_vault_header_returns_empty(self, plugin_config):
+        """Test that missing system tag without vault header returns empty result."""
+        plugin = Vault(plugin_config)
+
+        gateway_metadata = type("obj", (object,), {"tags": [{"id": "1", "label": "other:tag"}]})()
+        global_context = GlobalContext(request_id="test-3", metadata={"gateway": gateway_metadata})
+        context = PluginContext(global_context=global_context)
+
+        payload = ToolPreInvokePayload(name="test_tool", arguments={}, headers=HttpHeaderPayload(root={"Content-Type": "application/json"}))
+
+        result = await plugin.tool_pre_invoke(payload, context)
+
+        assert result.modified_payload is None
+        assert result.continue_processing
+
+    @pytest.mark.asyncio
+    async def test_non_dict_json_vault_tokens_stripped(self, plugin_config, plugin_context):
+        """Test that non-dict JSON in vault header (e.g. array) strips header without injecting auth."""
+        plugin = Vault(plugin_config)
+
+        # JSON array is valid JSON but not a dict — must not be treated as tokens
+        payload = ToolPreInvokePayload(name="test_tool", arguments={}, headers=HttpHeaderPayload(root={"Content-Type": "application/json", "X-Vault-Tokens": '["not", "a", "dict"]'}))
+
+        result = await plugin.tool_pre_invoke(payload, plugin_context)
+
+        # SECURITY: Vault header must be removed
+        assert result.modified_payload is not None
+        assert "X-Vault-Tokens" not in result.modified_payload.headers.root
+        # No Authorization header should be injected
+        assert "Authorization" not in result.modified_payload.headers.root
+        assert result.continue_processing
+
+    @pytest.mark.asyncio
     async def test_complex_token_key_parsing(self, plugin_config, plugin_context):
         """Test that complex token keys are parsed correctly."""
         plugin = Vault(plugin_config)
