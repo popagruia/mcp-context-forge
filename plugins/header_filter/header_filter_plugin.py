@@ -95,10 +95,7 @@ class HeaderFilter(Plugin):
         self._filter_headers_lower = {h.lower() for h in self._sconfig.filter_headers}
         self._passthrough_headers_lower = {h.lower() for h in self._sconfig.allow_passthrough_headers}
 
-        logger.info(
-            f"Header filter initialized: filtering {len(self._filter_headers_lower)} headers, "
-            f"allowing {len(self._passthrough_headers_lower)} passthrough headers"
-        )
+        logger.info(f"Header filter initialized: filtering {len(self._filter_headers_lower)} headers, " f"allowing {len(self._passthrough_headers_lower)} passthrough headers")
 
     def _filter_headers(self, headers: dict[str, str], context_name: str) -> tuple[dict[str, str], list[str]]:
         """Filter sensitive headers from the header dictionary.
@@ -159,7 +156,7 @@ class HeaderFilter(Plugin):
 
         return ToolPreInvokeResult()
 
-    async def resource_pre_fetch(self, payload: ResourcePreFetchPayload, context: PluginContext) -> ResourcePreFetchResult:
+    async def resource_pre_fetch(self, payload: ResourcePreFetchPayload, context: PluginContext) -> ResourcePreFetchResult:  # pylint: disable=unused-argument
         """Filter headers before resource fetch.
 
         Args:
@@ -185,7 +182,7 @@ class HeaderFilter(Plugin):
 
         return ResourcePreFetchResult()
 
-    async def prompt_prehook(self, payload: PromptPrehookPayload, context: PluginContext) -> PromptPrehookResult:
+    async def prompt_prehook(self, payload: PromptPrehookPayload, context: PluginContext) -> PromptPrehookResult:  # pylint: disable=unused-argument
         """Filter headers before prompt execution.
 
         Args:
@@ -211,7 +208,7 @@ class HeaderFilter(Plugin):
 
         return PromptPrehookResult()
 
-    async def agent_pre_invoke(self, payload: AgentPreInvokePayload, context: PluginContext) -> AgentPreInvokeResult:
+    async def agent_pre_invoke(self, payload: AgentPreInvokePayload, context: PluginContext) -> AgentPreInvokeResult:  # pylint: disable=unused-argument
         """Filter headers before agent invocation.
 
         Args:
@@ -245,5 +242,6 @@ class HeaderFilter(Plugin):
         """
         logger.info("Header filter plugin shutting down")
         return None
+
 
 # Made with Bob

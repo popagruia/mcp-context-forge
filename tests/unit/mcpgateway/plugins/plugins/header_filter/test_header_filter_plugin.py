@@ -270,7 +270,7 @@ class TestHeaderFilterPluginFunctionality:
 
         headers = {"Content-Type": "application/json", "Authorization": "Bearer token", "Cookie": "session=xyz"}
 
-        filtered, removed = plugin._filter_headers(headers, "test:context")
+        filtered, removed = plugin._filter_headers(headers, "test:context")  # pylint: disable=protected-access
 
         # Check filtered headers
         assert "Content-Type" in filtered
