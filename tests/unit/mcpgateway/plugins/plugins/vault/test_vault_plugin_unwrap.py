@@ -165,8 +165,11 @@ async def test_unwrap_mode_missing_session_id(vault_plugin_unwrap, plugin_contex
 
     result = await vault_plugin_unwrap.tool_pre_invoke(payload, plugin_context)
 
-    # Should return empty result (no modification)
-    assert result.modified_payload is None
+    # Should return modified payload with vault header removed (security requirement)
+    assert result.modified_payload is not None
+    headers = result.modified_payload.headers.model_dump()
+    assert "X-Vault-Tokens" not in headers  # Vault header must be removed
+    assert "Authorization" not in headers  # No auth header added (failed to unwrap)
 
 
 @pytest.mark.asyncio
