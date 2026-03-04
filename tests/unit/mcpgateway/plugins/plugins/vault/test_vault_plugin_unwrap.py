@@ -28,9 +28,9 @@ class MockVaultProxy:
     """Mock vault proxy for testing."""
 
     @staticmethod
-    async def async_unwrap_secret(token_name: str, vault_token: str) -> str:
+    async def async_unwrap_secret(token_name: str, vault_token: str) -> dict:
         """Mock unwrap implementation."""
-        return f"unwrapped_{vault_token}"
+        return {"key": token_name, "value": f"unwrapped_{vault_token}"}
 
 
 @pytest.fixture
@@ -96,7 +96,7 @@ async def test_unwrap_mode_first_call(vault_plugin_unwrap, plugin_context, tool_
 
     # Mock vault_proxy module
     mock_vault_proxy = MagicMock()
-    mock_vault_proxy.async_unwrap_secret = AsyncMock(return_value="unwrapped_token_abc")
+    mock_vault_proxy.async_unwrap_secret = AsyncMock(return_value={"key": "github.com", "value": "unwrapped_token_abc"})
 
     with patch("plugins.vault.vault_plugin.get_redis_client", return_value=mock_redis):
         with patch("plugins.vault.vault_plugin.vault_proxy", mock_vault_proxy):
@@ -204,7 +204,7 @@ async def test_unwrap_mode_no_redis_fallback(vault_plugin_unwrap, plugin_context
     """Test UNWRAP mode falls back to direct unwrap when Redis unavailable."""
     # Mock vault_proxy module
     mock_vault_proxy = MagicMock()
-    mock_vault_proxy.async_unwrap_secret = AsyncMock(return_value="unwrapped_no_cache")
+    mock_vault_proxy.async_unwrap_secret = AsyncMock(return_value={"key": "github.com", "value": "unwrapped_no_cache"})
 
     # Mock Redis unavailable
     with patch("plugins.vault.vault_plugin.get_redis_client", return_value=None):
@@ -244,7 +244,7 @@ async def test_unwrap_mode_different_sessions_isolated(vault_plugin_unwrap, plug
 
     async def mock_unwrap(token_name, vault_token):
         unwrap_call_count[0] += 1
-        return f"unwrapped_session_{unwrap_call_count[0]}"
+        return {"key": token_name, "value": f"unwrapped_session_{unwrap_call_count[0]}"}
 
     mock_vault_proxy.async_unwrap_secret = mock_unwrap
 
@@ -288,15 +288,15 @@ async def test_cache_key_generation(vault_plugin_unwrap):
     session_id = "test-session-123"
     wrapped_token = "wrapped_token_xyz"
 
-    key1 = vault_plugin_unwrap._get_cache_key(session_id, wrapped_token)
-    key2 = vault_plugin_unwrap._get_cache_key(session_id, wrapped_token)
+    key1 = vault_plugin_unwrap._cache_manager.get_cache_key(session_id, wrapped_token)
+    key2 = vault_plugin_unwrap._cache_manager.get_cache_key(session_id, wrapped_token)
 
     # Same inputs should produce same key
     assert key1 == key2
     assert len(key1) == 64  # SHA-256 hex digest
 
     # Different inputs should produce different keys
-    key3 = vault_plugin_unwrap._get_cache_key("different-session", wrapped_token)
+    key3 = vault_plugin_unwrap._cache_manager.get_cache_key("different-session", wrapped_token)
     assert key1 != key3
 
 
@@ -310,7 +310,7 @@ async def test_unwrap_mode_redis_error_handling(vault_plugin_unwrap, plugin_cont
 
     # Mock vault_proxy module
     mock_vault_proxy = MagicMock()
-    mock_vault_proxy.async_unwrap_secret = AsyncMock(return_value="unwrapped_despite_redis_error")
+    mock_vault_proxy.async_unwrap_secret = AsyncMock(return_value={"key": "github.com", "value": "unwrapped_despite_redis_error"})
 
     with patch("plugins.vault.vault_plugin.get_redis_client", return_value=mock_redis):
         with patch("plugins.vault.vault_plugin.vault_proxy", mock_vault_proxy):
