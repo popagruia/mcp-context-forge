@@ -6,7 +6,7 @@ plugins:
     description: "Filters sensitive headers before sending to MCP endpoints"
     version: "1.0.0"
     author: "Adrian Popa"
-    hooks: ["tool_pre_invoke"]  # Start with tool_pre_invoke only
+    hooks: ["tool_pre_invoke", "agent_pre_invoke"]
     tags: ["security", "headers", "filtering"]
     mode: "permissive"  # Start in permissive mode for safety
     priority: 20  # Lower number = higher priority (runs first). Run after vault plugin (priority 10)
@@ -36,5 +36,3 @@ plugin_settings:
   fail_on_plugin_error: false
   enable_plugin_api: true
   plugin_health_check_interval: 60
-
-# Made with Bob

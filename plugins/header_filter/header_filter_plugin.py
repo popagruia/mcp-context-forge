@@ -9,11 +9,8 @@ Header Filter Plugin.
 Filters sensitive headers before sending requests to MCP endpoints.
 Prevents leakage of authentication tokens, cookies, and other sensitive data.
 
-Hook: tool_pre_invoke, resource_pre_fetch, prompt_prehook, agent_pre_invoke
+Hook: tool_pre_invoke, agent_pre_invoke
 """
-
-# Standard
-from typing import Set
 
 # Third-Party
 from pydantic import BaseModel, Field
@@ -26,10 +23,6 @@ from mcpgateway.plugins.framework import (
     Plugin,
     PluginConfig,
     PluginContext,
-    PromptPrehookPayload,
-    PromptPrehookResult,
-    ResourcePreFetchPayload,
-    ResourcePreFetchResult,
     ToolPreInvokePayload,
     ToolPreInvokeResult,
 )
@@ -49,7 +42,7 @@ class HeaderFilterConfig(BaseModel):
         allow_passthrough_headers: Set of headers to always allow through (overrides filter_headers).
     """
 
-    filter_headers: Set[str] = Field(
+    filter_headers: set[str] = Field(
         default_factory=lambda: {
             "Authorization",
             "Cookie",
@@ -62,15 +55,15 @@ class HeaderFilterConfig(BaseModel):
         }
     )
     log_filtered_headers: bool = True
-    allow_passthrough_headers: Set[str] = Field(default_factory=set)
+    allow_passthrough_headers: set[str] = Field(default_factory=set)
 
 
 class HeaderFilter(Plugin):
     """Header filter plugin that removes sensitive headers before sending to MCP endpoints.
 
     This plugin prevents sensitive authentication and authorization headers from being
-    leaked to MCP servers. It runs on all pre-invoke hooks (tool, resource, prompt, agent)
-    to ensure consistent header filtering across all MCP operations.
+    leaked to MCP servers. It runs on pre-invoke hooks for tools and agents where HTTP
+    headers are available in the payload.
 
     Security considerations:
     - Headers are filtered case-insensitively
@@ -130,7 +123,7 @@ class HeaderFilter(Plugin):
 
         return filtered_headers, removed_headers
 
-    async def tool_pre_invoke(self, payload: ToolPreInvokePayload, context: PluginContext) -> ToolPreInvokeResult:
+    async def tool_pre_invoke(self, payload: ToolPreInvokePayload, context: PluginContext) -> ToolPreInvokeResult:  # pylint: disable=unused-argument
         """Filter headers before tool invocation.
 
         Args:
@@ -151,62 +144,10 @@ class HeaderFilter(Plugin):
         if removed:
             if self._sconfig.log_filtered_headers:
                 logger.info(f"Filtered {len(removed)} header(s) from {context_name}: {', '.join(removed)}")
-            payload.headers = HttpHeaderPayload(root=filtered_headers)
-            return ToolPreInvokeResult(modified_payload=payload)
+            modified = payload.model_copy(update={"headers": HttpHeaderPayload(root=filtered_headers)})
+            return ToolPreInvokeResult(modified_payload=modified)
 
         return ToolPreInvokeResult()
-
-    async def resource_pre_fetch(self, payload: ResourcePreFetchPayload, context: PluginContext) -> ResourcePreFetchResult:  # pylint: disable=unused-argument
-        """Filter headers before resource fetch.
-
-        Args:
-            payload: The resource payload containing headers.
-            context: Plugin execution context.
-
-        Returns:
-            Result with filtered headers.
-        """
-        if not payload.headers:
-            return ResourcePreFetchResult()
-
-        headers = payload.headers.model_dump()
-        context_name = f"resource:{payload.uri}"
-
-        filtered_headers, removed = self._filter_headers(headers, context_name)
-
-        if removed:
-            if self._sconfig.log_filtered_headers:
-                logger.info(f"Filtered {len(removed)} header(s) from {context_name}: {', '.join(removed)}")
-            payload.headers = HttpHeaderPayload(root=filtered_headers)
-            return ResourcePreFetchResult(modified_payload=payload)
-
-        return ResourcePreFetchResult()
-
-    async def prompt_prehook(self, payload: PromptPrehookPayload, context: PluginContext) -> PromptPrehookResult:  # pylint: disable=unused-argument
-        """Filter headers before prompt execution.
-
-        Args:
-            payload: The prompt payload containing headers.
-            context: Plugin execution context.
-
-        Returns:
-            Result with filtered headers.
-        """
-        if not payload.headers:
-            return PromptPrehookResult()
-
-        headers = payload.headers.model_dump()
-        context_name = f"prompt:{payload.name}"
-
-        filtered_headers, removed = self._filter_headers(headers, context_name)
-
-        if removed:
-            if self._sconfig.log_filtered_headers:
-                logger.info(f"Filtered {len(removed)} header(s) from {context_name}: {', '.join(removed)}")
-            payload.headers = HttpHeaderPayload(root=filtered_headers)
-            return PromptPrehookResult(modified_payload=payload)
-
-        return PromptPrehookResult()
 
     async def agent_pre_invoke(self, payload: AgentPreInvokePayload, context: PluginContext) -> AgentPreInvokeResult:  # pylint: disable=unused-argument
         """Filter headers before agent invocation.
@@ -222,26 +163,18 @@ class HeaderFilter(Plugin):
             return AgentPreInvokeResult()
 
         headers = payload.headers.model_dump()
-        context_name = f"agent:{payload.name}"
+        context_name = f"agent:{payload.agent_id}"
 
         filtered_headers, removed = self._filter_headers(headers, context_name)
 
         if removed:
             if self._sconfig.log_filtered_headers:
                 logger.info(f"Filtered {len(removed)} header(s) from {context_name}: {', '.join(removed)}")
-            payload.headers = HttpHeaderPayload(root=filtered_headers)
-            return AgentPreInvokeResult(modified_payload=payload)
+            modified = payload.model_copy(update={"headers": HttpHeaderPayload(root=filtered_headers)})
+            return AgentPreInvokeResult(modified_payload=modified)
 
         return AgentPreInvokeResult()
 
     async def shutdown(self) -> None:
-        """Shutdown the plugin gracefully.
-
-        Returns:
-            None.
-        """
+        """Shutdown the plugin gracefully."""
         logger.info("Header filter plugin shutting down")
-        return None
-
-
-# Made with Bob

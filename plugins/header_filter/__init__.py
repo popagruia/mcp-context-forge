@@ -7,5 +7,3 @@ SPDX-License-Identifier: Apache-2.0
 
 Header filter plugin implementation for filtering sensitive headers.
 """
-
-# Made with Bob

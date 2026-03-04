@@ -12,6 +12,7 @@ import pytest
 
 # First-Party
 from mcpgateway.plugins.framework import (
+    AgentPreInvokePayload,
     GlobalContext,
     HttpHeaderPayload,
     PluginConfig,
@@ -22,7 +23,7 @@ from mcpgateway.plugins.framework import (
 )
 
 # Import the Header Filter plugin
-from plugins.header_filter.header_filter_plugin import HeaderFilter
+from plugins.header_filter.header_filter_plugin import HeaderFilter, HeaderFilterConfig
 
 
 class TestHeaderFilterPluginFunctionality:
@@ -54,13 +55,13 @@ class TestHeaderFilterPluginFunctionality:
         global_context = GlobalContext(request_id="test-1")
         return PluginContext(global_context=global_context)
 
+    # ── tool_pre_invoke tests ─────────────────────────────────────────
+
     @pytest.mark.asyncio
     async def test_no_headers_returns_empty_result(self, plugin_config, plugin_context):
         """Test that missing headers returns empty result."""
         plugin = HeaderFilter(plugin_config)
-
-        # Create payload without headers
-        payload = ToolPreInvokePayload(name="test_tool", arguments={}, headers=None)
+        payload = ToolPreInvokePayload(name="test_tool", args={}, headers=None)
 
         result = await plugin.tool_pre_invoke(payload, plugin_context)
 
@@ -71,12 +72,10 @@ class TestHeaderFilterPluginFunctionality:
     async def test_authorization_header_is_filtered(self, plugin_config, plugin_context):
         """Test that Authorization header is filtered."""
         plugin = HeaderFilter(plugin_config)
-
-        # Create payload with Authorization header
         payload = ToolPreInvokePayload(
             name="test_tool",
-            arguments={},
-            headers=HttpHeaderPayload(root={"Content-Type": "application/json", "Authorization": "Bearer secret_token"}),
+            args={},
+            headers=HttpHeaderPayload({"Content-Type": "application/json", "Authorization": "Bearer secret_token"}),
         )
 
         result = await plugin.tool_pre_invoke(payload, plugin_context)
@@ -90,12 +89,10 @@ class TestHeaderFilterPluginFunctionality:
     async def test_cookie_header_is_filtered(self, plugin_config, plugin_context):
         """Test that Cookie header is filtered."""
         plugin = HeaderFilter(plugin_config)
-
-        # Create payload with Cookie header
         payload = ToolPreInvokePayload(
             name="test_tool",
-            arguments={},
-            headers=HttpHeaderPayload(root={"Content-Type": "application/json", "Cookie": "session=abc123"}),
+            args={},
+            headers=HttpHeaderPayload({"Content-Type": "application/json", "Cookie": "session=abc123"}),
         )
 
         result = await plugin.tool_pre_invoke(payload, plugin_context)
@@ -108,13 +105,11 @@ class TestHeaderFilterPluginFunctionality:
     async def test_multiple_sensitive_headers_filtered(self, plugin_config, plugin_context):
         """Test that multiple sensitive headers are filtered."""
         plugin = HeaderFilter(plugin_config)
-
-        # Create payload with multiple sensitive headers
         payload = ToolPreInvokePayload(
             name="test_tool",
-            arguments={},
+            args={},
             headers=HttpHeaderPayload(
-                root={
+                {
                     "Content-Type": "application/json",
                     "Authorization": "Bearer token",
                     "Cookie": "session=xyz",
@@ -127,11 +122,9 @@ class TestHeaderFilterPluginFunctionality:
         result = await plugin.tool_pre_invoke(payload, plugin_context)
 
         assert result.modified_payload is not None
-        # Sensitive headers should be removed
         assert "Authorization" not in result.modified_payload.headers.root
         assert "Cookie" not in result.modified_payload.headers.root
         assert "X-API-Key" not in result.modified_payload.headers.root
-        # Safe headers should remain
         assert "Content-Type" in result.modified_payload.headers.root
         assert "User-Agent" in result.modified_payload.headers.root
 
@@ -139,17 +132,15 @@ class TestHeaderFilterPluginFunctionality:
     async def test_case_insensitive_filtering(self, plugin_config, plugin_context):
         """Test that header filtering is case-insensitive."""
         plugin = HeaderFilter(plugin_config)
-
-        # Create payload with mixed-case headers
         payload = ToolPreInvokePayload(
             name="test_tool",
-            arguments={},
+            args={},
             headers=HttpHeaderPayload(
-                root={
+                {
                     "content-type": "application/json",
-                    "authorization": "Bearer token",  # lowercase
-                    "COOKIE": "session=xyz",  # uppercase
-                    "X-Api-Key": "secret",  # mixed case
+                    "authorization": "Bearer token",
+                    "COOKIE": "session=xyz",
+                    "X-Api-Key": "secret",
                 }
             ),
         )
@@ -157,17 +148,14 @@ class TestHeaderFilterPluginFunctionality:
         result = await plugin.tool_pre_invoke(payload, plugin_context)
 
         assert result.modified_payload is not None
-        # All sensitive headers should be removed regardless of case
         assert "authorization" not in result.modified_payload.headers.root
         assert "COOKIE" not in result.modified_payload.headers.root
         assert "X-Api-Key" not in result.modified_payload.headers.root
-        # Safe header should remain
         assert "content-type" in result.modified_payload.headers.root
 
     @pytest.mark.asyncio
     async def test_passthrough_headers_not_filtered(self, plugin_context):
         """Test that passthrough headers are not filtered even if in filter list."""
-        # Create config with passthrough headers
         config = PluginConfig(
             name="TestHeaderFilter",
             description="Test",
@@ -180,41 +168,34 @@ class TestHeaderFilterPluginFunctionality:
             priority=20,
             config={
                 "filter_headers": ["Authorization", "Cookie"],
-                "allow_passthrough_headers": ["Authorization"],  # Allow Authorization through
+                "allow_passthrough_headers": ["Authorization"],
             },
         )
-
         plugin = HeaderFilter(config)
-
         payload = ToolPreInvokePayload(
             name="test_tool",
-            arguments={},
-            headers=HttpHeaderPayload(root={"Authorization": "Bearer token", "Cookie": "session=xyz"}),
+            args={},
+            headers=HttpHeaderPayload({"Authorization": "Bearer token", "Cookie": "session=xyz"}),
         )
 
         result = await plugin.tool_pre_invoke(payload, plugin_context)
 
         assert result.modified_payload is not None
-        # Authorization should pass through
         assert "Authorization" in result.modified_payload.headers.root
-        # Cookie should still be filtered
         assert "Cookie" not in result.modified_payload.headers.root
 
     @pytest.mark.asyncio
     async def test_no_filtered_headers_returns_empty_result(self, plugin_config, plugin_context):
         """Test that when no headers are filtered, empty result is returned."""
         plugin = HeaderFilter(plugin_config)
-
-        # Create payload with only safe headers
         payload = ToolPreInvokePayload(
             name="test_tool",
-            arguments={},
-            headers=HttpHeaderPayload(root={"Content-Type": "application/json", "User-Agent": "TestClient/1.0"}),
+            args={},
+            headers=HttpHeaderPayload({"Content-Type": "application/json", "User-Agent": "TestClient/1.0"}),
         )
 
         result = await plugin.tool_pre_invoke(payload, plugin_context)
 
-        # No headers were filtered, so no modification needed
         assert result.modified_payload is None
         assert result.continue_processing
 
@@ -222,9 +203,7 @@ class TestHeaderFilterPluginFunctionality:
     async def test_empty_headers_dict_returns_empty_result(self, plugin_config, plugin_context):
         """Test that empty headers dict returns empty result."""
         plugin = HeaderFilter(plugin_config)
-
-        # Create payload with empty headers
-        payload = ToolPreInvokePayload(name="test_tool", arguments={}, headers=HttpHeaderPayload(root={}))
+        payload = ToolPreInvokePayload(name="test_tool", args={}, headers=HttpHeaderPayload({}))
 
         result = await plugin.tool_pre_invoke(payload, plugin_context)
 
@@ -232,9 +211,63 @@ class TestHeaderFilterPluginFunctionality:
         assert result.continue_processing
 
     @pytest.mark.asyncio
-    async def test_default_config_when_config_invalid(self, plugin_context):
-        """Test that plugin uses default config when provided config is invalid."""
-        # Create config with invalid config data
+    async def test_original_payload_not_mutated(self, plugin_config, plugin_context):
+        """Test that the original payload is not mutated (frozen model compliance)."""
+        plugin = HeaderFilter(plugin_config)
+        original_headers = {"Content-Type": "application/json", "Authorization": "Bearer token"}
+        payload = ToolPreInvokePayload(
+            name="test_tool",
+            args={},
+            headers=HttpHeaderPayload(original_headers.copy()),
+        )
+
+        result = await plugin.tool_pre_invoke(payload, plugin_context)
+
+        # Original payload should still have Authorization
+        assert "Authorization" in payload.headers.root
+        # Modified payload should not
+        assert result.modified_payload is not None
+        assert "Authorization" not in result.modified_payload.headers.root
+
+    # ── agent_pre_invoke tests ────────────────────────────────────────
+
+    @pytest.mark.asyncio
+    async def test_agent_no_headers_returns_empty_result(self, plugin_config, plugin_context):
+        """Test agent_pre_invoke with no headers."""
+        plugin = HeaderFilter(plugin_config)
+        payload = AgentPreInvokePayload(agent_id="test-agent", messages=[], headers=None)
+
+        result = await plugin.agent_pre_invoke(payload, plugin_context)
+
+        assert result.modified_payload is None
+        assert result.continue_processing
+
+    @pytest.mark.asyncio
+    async def test_agent_headers_filtered(self, plugin_config, plugin_context):
+        """Test agent_pre_invoke filters sensitive headers."""
+        plugin = HeaderFilter(plugin_config)
+        payload = AgentPreInvokePayload(
+            agent_id="test-agent",
+            messages=[],
+            headers=HttpHeaderPayload(
+                {
+                    "Content-Type": "application/json",
+                    "Authorization": "Bearer secret",
+                    "Cookie": "session=abc",
+                }
+            ),
+        )
+
+        result = await plugin.agent_pre_invoke(payload, plugin_context)
+
+        assert result.modified_payload is not None
+        assert "Authorization" not in result.modified_payload.headers.root
+        assert "Cookie" not in result.modified_payload.headers.root
+        assert "Content-Type" in result.modified_payload.headers.root
+
+    @pytest.mark.asyncio
+    async def test_agent_passthrough_headers(self, plugin_context):
+        """Test agent_pre_invoke respects passthrough headers."""
         config = PluginConfig(
             name="TestHeaderFilter",
             description="Test",
@@ -245,16 +278,62 @@ class TestHeaderFilterPluginFunctionality:
             tags=["test"],
             mode=PluginMode.ENFORCE,
             priority=20,
-            config={"invalid_key": "invalid_value"},  # Invalid config
+            config={
+                "filter_headers": ["Authorization", "Cookie"],
+                "allow_passthrough_headers": ["Authorization"],
+            },
+        )
+        plugin = HeaderFilter(config)
+        payload = AgentPreInvokePayload(
+            agent_id="test-agent",
+            messages=[],
+            headers=HttpHeaderPayload({"Authorization": "Bearer token", "Cookie": "session=xyz"}),
         )
 
+        result = await plugin.agent_pre_invoke(payload, plugin_context)
+
+        assert result.modified_payload is not None
+        assert "Authorization" in result.modified_payload.headers.root
+        assert "Cookie" not in result.modified_payload.headers.root
+
+    @pytest.mark.asyncio
+    async def test_agent_no_filtered_headers_returns_empty_result(self, plugin_config, plugin_context):
+        """Test agent_pre_invoke returns empty result when no headers filtered."""
+        plugin = HeaderFilter(plugin_config)
+        payload = AgentPreInvokePayload(
+            agent_id="test-agent",
+            messages=[],
+            headers=HttpHeaderPayload({"Content-Type": "application/json"}),
+        )
+
+        result = await plugin.agent_pre_invoke(payload, plugin_context)
+
+        assert result.modified_payload is None
+        assert result.continue_processing
+
+    # ── Config and initialization tests ───────────────────────────────
+
+    @pytest.mark.asyncio
+    async def test_default_config_when_config_is_none(self, plugin_context):
+        """Test that plugin uses default config when config dict is None."""
+        config = PluginConfig(
+            name="TestHeaderFilter",
+            description="Test",
+            author="Test",
+            kind="plugins.header_filter.header_filter_plugin.HeaderFilter",
+            version="1.0",
+            hooks=[ToolHookType.TOOL_PRE_INVOKE],
+            tags=["test"],
+            mode=PluginMode.ENFORCE,
+            priority=20,
+            config=None,
+        )
         plugin = HeaderFilter(config)
 
-        # Plugin should still work with default config
         payload = ToolPreInvokePayload(
             name="test_tool",
-            arguments={},
-            headers=HttpHeaderPayload(root={"Authorization": "Bearer token", "Content-Type": "application/json"}),
+            args={},
+            headers=HttpHeaderPayload({"Authorization": "Bearer token", "Content-Type": "application/json"}),
         )
 
         result = await plugin.tool_pre_invoke(payload, plugin_context)
@@ -264,29 +343,99 @@ class TestHeaderFilterPluginFunctionality:
         assert "Authorization" not in result.modified_payload.headers.root
 
     @pytest.mark.asyncio
-    async def test_filter_headers_method_returns_correct_tuple(self, plugin_config):
+    async def test_default_config_when_config_causes_validation_error(self, plugin_context):
+        """Test that plugin falls back to defaults when config causes a validation error."""
+        config = PluginConfig(
+            name="TestHeaderFilter",
+            description="Test",
+            author="Test",
+            kind="plugins.header_filter.header_filter_plugin.HeaderFilter",
+            version="1.0",
+            hooks=[ToolHookType.TOOL_PRE_INVOKE],
+            tags=["test"],
+            mode=PluginMode.ENFORCE,
+            priority=20,
+            config={"filter_headers": "not-a-list", "log_filtered_headers": "not-a-bool"},
+        )
+        plugin = HeaderFilter(config)
+
+        payload = ToolPreInvokePayload(
+            name="test_tool",
+            args={},
+            headers=HttpHeaderPayload({"Authorization": "Bearer token", "Content-Type": "application/json"}),
+        )
+
+        result = await plugin.tool_pre_invoke(payload, plugin_context)
+
+        # Default config fallback should filter Authorization
+        assert result.modified_payload is not None
+        assert "Authorization" not in result.modified_payload.headers.root
+
+    def test_header_filter_config_defaults(self):
+        """Test HeaderFilterConfig has sensible defaults."""
+        cfg = HeaderFilterConfig()
+
+        assert "Authorization" in cfg.filter_headers
+        assert "Cookie" in cfg.filter_headers
+        assert "Set-Cookie" in cfg.filter_headers
+        assert "X-Vault-Tokens" in cfg.filter_headers
+        assert "X-API-Key" in cfg.filter_headers
+        assert "X-Auth-Token" in cfg.filter_headers
+        assert "Proxy-Authorization" in cfg.filter_headers
+        assert "WWW-Authenticate" in cfg.filter_headers
+        assert cfg.log_filtered_headers is True
+        assert len(cfg.allow_passthrough_headers) == 0
+
+    # ── _filter_headers internal method tests ─────────────────────────
+
+    def test_filter_headers_method_returns_correct_tuple(self, plugin_config):
         """Test that _filter_headers method returns correct tuple."""
         plugin = HeaderFilter(plugin_config)
-
         headers = {"Content-Type": "application/json", "Authorization": "Bearer token", "Cookie": "session=xyz"}
 
-        filtered, removed = plugin._filter_headers(headers, "test:context")  # pylint: disable=protected-access
+        filtered, removed = plugin._filter_headers(headers, "test:context")
 
-        # Check filtered headers
         assert "Content-Type" in filtered
         assert "Authorization" not in filtered
         assert "Cookie" not in filtered
-
-        # Check removed list
         assert "Authorization" in removed
         assert "Cookie" in removed
         assert len(removed) == 2
 
+    def test_filter_headers_empty_dict(self, plugin_config):
+        """Test _filter_headers with empty input dict."""
+        plugin = HeaderFilter(plugin_config)
+
+        filtered, removed = plugin._filter_headers({}, "test:context")
+
+        assert filtered == {}
+        assert removed == []
+
+    def test_filter_headers_all_removed(self, plugin_config):
+        """Test _filter_headers when all headers are sensitive."""
+        plugin = HeaderFilter(plugin_config)
+        headers = {"Authorization": "Bearer token", "Cookie": "session=xyz", "X-API-Key": "key"}
+
+        filtered, removed = plugin._filter_headers(headers, "test:context")
+
+        assert filtered == {}
+        assert len(removed) == 3
+
+    def test_filter_headers_none_removed(self, plugin_config):
+        """Test _filter_headers when no headers are sensitive."""
+        plugin = HeaderFilter(plugin_config)
+        headers = {"Content-Type": "application/json", "Accept": "text/html"}
+
+        filtered, removed = plugin._filter_headers(headers, "test:context")
+
+        assert filtered == headers
+        assert removed == []
+
+    # ── Integration-style scenarios ───────────────────────────────────
+
     @pytest.mark.asyncio
     async def test_passthrough_for_vault_integration(self, plugin_context):
         """Test passthrough scenario: Vault plugin manages Authorization, filter manages others."""
-        # Simulate scenario where Vault plugin handles Authorization
-        # but we want to filter other sensitive headers
         config = PluginConfig(
             name="TestHeaderFilter",
             description="Test",
@@ -299,18 +448,16 @@ class TestHeaderFilterPluginFunctionality:
             priority=20,
             config={
                 "filter_headers": ["Authorization", "Cookie", "X-API-Key"],
-                "allow_passthrough_headers": ["Authorization"],  # Vault manages this
+                "allow_passthrough_headers": ["Authorization"],
             },
         )
-
         plugin = HeaderFilter(config)
-
         payload = ToolPreInvokePayload(
             name="test_tool",
-            arguments={},
+            args={},
             headers=HttpHeaderPayload(
-                root={
-                    "Authorization": "Bearer vault_token",  # From Vault plugin
+                {
+                    "Authorization": "Bearer vault_token",
                     "Cookie": "session=abc",
                     "X-API-Key": "secret_key",
                     "Content-Type": "application/json",
@@ -321,59 +468,11 @@ class TestHeaderFilterPluginFunctionality:
         result = await plugin.tool_pre_invoke(payload, plugin_context)
 
         assert result.modified_payload is not None
-        # Authorization passes through (Vault manages it)
         assert "Authorization" in result.modified_payload.headers.root
         assert result.modified_payload.headers.root["Authorization"] == "Bearer vault_token"
-        # Other sensitive headers are filtered
         assert "Cookie" not in result.modified_payload.headers.root
         assert "X-API-Key" not in result.modified_payload.headers.root
-        # Safe headers remain
         assert "Content-Type" in result.modified_payload.headers.root
-
-    @pytest.mark.asyncio
-    async def test_gradual_rollout_scenario(self, plugin_context):
-        """Test gradual rollout: filter most headers but allow some during testing."""
-        # Scenario: Rolling out filtering gradually
-        config = PluginConfig(
-            name="TestHeaderFilter",
-            description="Test",
-            author="Test",
-            kind="plugins.header_filter.header_filter_plugin.HeaderFilter",
-            version="1.0",
-            hooks=[ToolHookType.TOOL_PRE_INVOKE],
-            tags=["test"],
-            mode=PluginMode.PERMISSIVE,  # Permissive mode for testing
-            priority=20,
-            config={
-                "filter_headers": ["Authorization", "Cookie", "X-Custom-Token", "X-API-Key"],
-                "allow_passthrough_headers": ["X-Custom-Token"],  # Temporary exception during testing
-            },
-        )
-
-        plugin = HeaderFilter(config)
-
-        payload = ToolPreInvokePayload(
-            name="test_tool",
-            arguments={},
-            headers=HttpHeaderPayload(
-                root={
-                    "Authorization": "Bearer token",
-                    "Cookie": "session=xyz",
-                    "X-Custom-Token": "custom_value",  # Allowed during testing
-                    "X-API-Key": "api_key",
-                }
-            ),
-        )
-
-        result = await plugin.tool_pre_invoke(payload, plugin_context)
-
-        assert result.modified_payload is not None
-        # X-Custom-Token passes through (temporary exception)
-        assert "X-Custom-Token" in result.modified_payload.headers.root
-        # Other sensitive headers are filtered
-        assert "Authorization" not in result.modified_payload.headers.root
-        assert "Cookie" not in result.modified_payload.headers.root
-        assert "X-API-Key" not in result.modified_payload.headers.root
 
     @pytest.mark.asyncio
     async def test_multiple_passthrough_headers(self, plugin_context):
@@ -390,17 +489,15 @@ class TestHeaderFilterPluginFunctionality:
             priority=20,
             config={
                 "filter_headers": ["Authorization", "Cookie", "X-API-Key", "X-Custom-Header"],
-                "allow_passthrough_headers": ["Authorization", "X-Custom-Header"],  # Multiple exceptions
+                "allow_passthrough_headers": ["Authorization", "X-Custom-Header"],
             },
         )
-
         plugin = HeaderFilter(config)
-
         payload = ToolPreInvokePayload(
             name="test_tool",
-            arguments={},
+            args={},
             headers=HttpHeaderPayload(
-                root={
+                {
                     "Authorization": "Bearer token",
                     "Cookie": "session=xyz",
                     "X-API-Key": "api_key",
@@ -412,10 +509,8 @@ class TestHeaderFilterPluginFunctionality:
         result = await plugin.tool_pre_invoke(payload, plugin_context)
 
         assert result.modified_payload is not None
-        # Both passthrough headers remain
         assert "Authorization" in result.modified_payload.headers.root
         assert "X-Custom-Header" in result.modified_payload.headers.root
-        # Other sensitive headers are filtered
         assert "Cookie" not in result.modified_payload.headers.root
         assert "X-API-Key" not in result.modified_payload.headers.root
 
@@ -434,19 +529,17 @@ class TestHeaderFilterPluginFunctionality:
             priority=20,
             config={
                 "filter_headers": ["Authorization", "Cookie"],
-                "allow_passthrough_headers": ["authorization"],  # lowercase in config
+                "allow_passthrough_headers": ["authorization"],
             },
         )
-
         plugin = HeaderFilter(config)
-
         payload = ToolPreInvokePayload(
             name="test_tool",
-            arguments={},
+            args={},
             headers=HttpHeaderPayload(
-                root={
-                    "Authorization": "Bearer token",  # Mixed case in request
-                    "COOKIE": "session=xyz",  # Uppercase in request
+                {
+                    "Authorization": "Bearer token",
+                    "COOKIE": "session=xyz",
                 }
             ),
         )
@@ -454,13 +547,54 @@ class TestHeaderFilterPluginFunctionality:
         result = await plugin.tool_pre_invoke(payload, plugin_context)
 
         assert result.modified_payload is not None
-        # Authorization passes through despite case difference
         assert "Authorization" in result.modified_payload.headers.root
-        # Cookie is filtered
         assert "COOKIE" not in result.modified_payload.headers.root
+
+    # ── Shutdown test ─────────────────────────────────────────────────
+
+    @pytest.mark.asyncio
+    async def test_shutdown(self, plugin_config):
+        """Test graceful shutdown."""
+        plugin = HeaderFilter(plugin_config)
+
+        result = await plugin.shutdown()
+
+        assert result is None
+
+    # ── Logging behavior tests ────────────────────────────────────────
+
+    @pytest.mark.asyncio
+    async def test_log_filtered_headers_disabled(self, plugin_context):
+        """Test that logging is suppressed when log_filtered_headers is False."""
+        config = PluginConfig(
+            name="TestHeaderFilter",
+            description="Test",
+            author="Test",
+            kind="plugins.header_filter.header_filter_plugin.HeaderFilter",
+            version="1.0",
+            hooks=[ToolHookType.TOOL_PRE_INVOKE],
+            tags=["test"],
+            mode=PluginMode.ENFORCE,
+            priority=20,
+            config={
+                "filter_headers": ["Authorization"],
+                "log_filtered_headers": False,
+            },
+        )
+        plugin = HeaderFilter(config)
+        payload = ToolPreInvokePayload(
+            name="test_tool",
+            args={},
+            headers=HttpHeaderPayload({"Authorization": "Bearer token", "Content-Type": "application/json"}),
+        )
+
+        result = await plugin.tool_pre_invoke(payload, plugin_context)
+
+        # Should still filter even with logging disabled
+        assert result.modified_payload is not None
+        assert "Authorization" not in result.modified_payload.headers.root
+        assert "Content-Type" in result.modified_payload.headers.root
 
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
-
-# Made with Bob

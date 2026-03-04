@@ -11,7 +11,7 @@ The Header Filter Plugin prevents sensitive authentication and authorization hea
 - **Configurable filtering**: Define which headers to filter via YAML configuration
 - **Case-insensitive matching**: Headers are matched case-insensitively
 - **Passthrough support**: Allow specific headers through even if they're in the filter list
-- **Multi-hook support**: Works on tool_pre_invoke, resource_pre_fetch, prompt_prehook, and agent_pre_invoke
+- **Multi-hook support**: Works on tool_pre_invoke and agent_pre_invoke
 - **Logging**: Optional logging of filtered headers for audit purposes
 
 ## Configuration
@@ -24,7 +24,7 @@ plugins:
     kind: "plugins.header_filter.header_filter_plugin.HeaderFilter"
     description: "Filters sensitive headers before sending to MCP endpoints"
     version: "1.0.0"
-    hooks: ["tool_pre_invoke"]
+    hooks: ["tool_pre_invoke", "agent_pre_invoke"]
     mode: "permissive"  # or "enforce"
     priority: 20
     config:
@@ -39,13 +39,14 @@ plugins:
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `filter_headers` | List[str] | `["Cookie", "Set-Cookie"]` | Headers to filter (case-insensitive) |
+| `filter_headers` | List[str] | `["X-Vault-Tokens", "Cookie", "Set-Cookie"]` | Headers to filter (case-insensitive) |
 | `log_filtered_headers` | bool | `true` | Whether to log filtered headers |
 | `allow_passthrough_headers` | List[str] | `[]` | Headers to always allow through |
 
 ### Conservative Default Filtered Headers
 
 By default (in config.yaml), the plugin filters only these headers:
+- `X-Vault-Tokens` - Vault authentication tokens
 - `Cookie` - Session cookies
 - `Set-Cookie` - Cookie setting headers
 
