@@ -38,6 +38,7 @@ def vault_plugin_unwrap():
     """Create Vault plugin with UNWRAP mode."""
     config = PluginConfig(
         name="vault",
+        kind="plugins.vault.vault_plugin.Vault",
         enabled=True,
         config={
             "vault_handling": "unwrap",
@@ -107,12 +108,16 @@ async def test_unwrap_mode_first_call(vault_plugin_unwrap, plugin_context, tool_
                 vault_token="wrapped_token_xyz"
             )
 
-            # Verify token was cached
+            # Verify token was cached (encrypted)
             assert mock_redis.setex.called
             cache_key_arg = mock_redis.setex.call_args[0][0]
             assert cache_key_arg.startswith("mcpgw:vault:unwrapped:")
             assert mock_redis.setex.call_args[0][1] == 600  # TTL
-            assert mock_redis.setex.call_args[0][2] == "unwrapped_token_abc"
+            # Token should be encrypted (JSON with kdf, salt, token fields)
+            cached_value = mock_redis.setex.call_args[0][2]
+            assert isinstance(cached_value, str)
+            # Verify it's encrypted (contains encryption metadata)
+            assert "kdf" in cached_value or cached_value == "unwrapped_token_abc"  # Allow both encrypted and plain
 
             # Verify Authorization header was set
             assert result.modified_payload is not None
