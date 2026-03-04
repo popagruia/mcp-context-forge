@@ -17,7 +17,7 @@ from urllib.parse import urlparse
 
 # Third-Party
 import orjson
-from pydantic import BaseModel
+from pydantic import BaseModel, SecretStr
 
 # First-Party
 from mcpgateway.db import get_db
@@ -30,8 +30,14 @@ from mcpgateway.plugins.framework import (
     ToolPreInvokePayload,
     ToolPreInvokeResult,
 )
+from mcpgateway.services.encryption_service import get_encryption_service
 from mcpgateway.services.gateway_service import GatewayService
 from mcpgateway.services.logging_service import LoggingService
+from mcpgateway.utils.redis_client import get_redis_client
+
+# Local
+from . import vault_proxy
+from .vault_cache import VaultCacheManager
 
 # Initialize logging service first
 logging_service = LoggingService()
@@ -43,9 +49,11 @@ class VaultHandling(Enum):
 
     Attributes:
         RAW: Use raw token from vault.
+        UNWRAP: Unwrap token from vault proxy (single-use tokens).
     """
 
     RAW = "raw"
+    UNWRAP = "unwrap"
 
 
 class SystemHandling(Enum):
@@ -66,16 +74,24 @@ class VaultConfig(BaseModel):
     Attributes:
         system_tag_prefix: Prefix for system tags.
         vault_header_name: HTTP header name for vault tokens.
+        vault_session_header: HTTP header name for session ID (used with UNWRAP mode).
         vault_handling: Vault token handling mode.
         system_handling: System identification mode.
         auth_header_tag_prefix: Prefix for auth header tags (e.g., "AUTH_HEADER").
+        unwrap_cache_ttl_seconds: TTL for unwrapped token cache in seconds.
+        encrypt_cache: Enable encryption for cached tokens.
+        cache_encryption_key: Encryption key for cache (uses JWT secret if not provided).
     """
 
     system_tag_prefix: str = "system"
     vault_header_name: str = "X-Vault-Tokens"
+    vault_session_header: str = "X-Vault-Session-ID"
     vault_handling: VaultHandling = VaultHandling.RAW
     system_handling: SystemHandling = SystemHandling.TAG
     auth_header_tag_prefix: str = "AUTH_HEADER"
+    unwrap_cache_ttl_seconds: float = 600.0
+    encrypt_cache: bool = True
+    cache_encryption_key: SecretStr | None = None
 
 
 class Vault(Plugin):
@@ -93,6 +109,27 @@ class Vault(Plugin):
             self._sconfig = VaultConfig.model_validate(self._config.config or {})
         except Exception:
             self._sconfig = VaultConfig()
+        
+        # Initialize encryption service and cache manager if cache encryption is enabled
+        self._cache_manager: VaultCacheManager | None = None
+        if self._sconfig.encrypt_cache:
+            encryption_key = self._sconfig.cache_encryption_key
+            if not encryption_key:
+                # Use JWT secret as fallback
+                from mcpgateway.config import settings
+                encryption_key = settings.jwt_secret_key
+            encryption_service = get_encryption_service(encryption_key)
+            self._cache_manager = VaultCacheManager(
+                encryption_service=encryption_service,
+                ttl_seconds=self._sconfig.unwrap_cache_ttl_seconds,
+            )
+            logger.info("Cache encryption enabled for vault plugin")
+        else:
+            # Cache manager without encryption
+            self._cache_manager = VaultCacheManager(
+                encryption_service=None,
+                ttl_seconds=self._sconfig.unwrap_cache_ttl_seconds,
+            )
 
     def _parse_vault_token_key(self, key: str) -> tuple[str, str | None, str | None, str | None]:
         """Parse vault token key in format: system[:scope][:token_type][:token_name].
@@ -230,6 +267,44 @@ class Vault(Plugin):
         if token_value and token_key_used:
             # Parse the token key to determine handling
             parsed_system, scope, token_type, token_name = self._parse_vault_token_key(token_key_used)
+            
+            # Unwrap token first if UNWRAP mode is enabled (applies to all token types)
+            if vault_handling == VaultHandling.UNWRAP:
+                # Get session ID from header
+                session_id = headers.get(self._sconfig.vault_session_header)
+                if not session_id:
+                    logger.error(f"UNWRAP mode requires {self._sconfig.vault_session_header} header")
+                    payload = payload.model_copy(update={"headers": HttpHeaderPayload(root=headers)})
+                    return ToolPreInvokeResult(modified_payload=payload)
+                
+                # Unwrap token with caching
+                if self._cache_manager:
+                    try:
+                        redis_client = await get_redis_client()
+                        
+                        async def unwrap_fn(system_key: str, wrapped_token: str) -> str:
+                            """Wrapper function for vault_proxy.async_unwrap_secret"""
+                            result = await vault_proxy.async_unwrap_secret(token_name=system_key, vault_token=wrapped_token)
+                            return result["value"]
+                        
+                        token_value = await self._cache_manager.get_with_lock(
+                            redis_client=redis_client,
+                            session_id=session_id,
+                            system_key=parsed_system,
+                            wrapped_token=token_value,
+                            unwrap_fn=unwrap_fn,
+                        )
+                        logger.info(f"Using unwrapped token for system: {parsed_system}")
+                    except Exception as e:
+                        logger.error(f"Failed to unwrap token for system {parsed_system}, session {session_id[:8]}...: {e}")
+                        # Return modified payload with vault header removed
+                        payload = payload.model_copy(update={"headers": HttpHeaderPayload(root=headers)})
+                        return ToolPreInvokeResult(modified_payload=payload)
+                else:
+                    logger.error("Cache manager not initialized for UNWRAP mode")
+                    payload = payload.model_copy(update={"headers": HttpHeaderPayload(root=headers)})
+                    return ToolPreInvokeResult(modified_payload=payload)
+            
             # Determine how to handle the token based on token_type and AUTH_HEADER tag
             if token_type == "PAT":
                 # Handle Personal Access Token
@@ -246,16 +321,14 @@ class Vault(Plugin):
                     modified = True
             elif token_type == "OAUTH2" or token_type is None:
                 # Handle OAuth2 token or default behavior (when token_type is missing)
-                if vault_handling == VaultHandling.RAW:
-                    logger.debug("Set Bearer token for system: %s", parsed_system)
-                    headers["Authorization"] = f"Bearer {token_value}"
-                    modified = True
+                logger.debug("Set Bearer token for system: %s", parsed_system)
+                headers["Authorization"] = f"Bearer {token_value}"
+                modified = True
             else:
-                # Unknown token type, use default behavior
+                # Unknown token type, use default Bearer token
                 logger.warning("Unknown token type '%s', using default Bearer token", token_type)
-                if vault_handling == VaultHandling.RAW:
-                    headers["Authorization"] = f"Bearer {token_value}"
-                    modified = True
+                headers["Authorization"] = f"Bearer {token_value}"
+                modified = True
 
         if modified:
             logger.debug("Modified tool '%s' to add auth header", payload.name)
